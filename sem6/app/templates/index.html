@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Digit Recognition</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background: #f3f4f6;
+        min-height: 100vh;
+      }
+
+      .canvas-container {
+        position: relative;
+        border-radius: 1rem;
+        padding: 2rem;
+      }
+
+      canvas {
+        border: 3px solid black;
+        border-radius: 0.5rem;
+        cursor: crosshair;
+        background: white;
+        margin: auto;
+      }
+
+      .result-card {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-top: 1.5rem;
+        box-shadow:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1),
+          0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      }
+
+      .confidence-bar {
+        height: 0.5rem;
+        background: #e5e7eb;
+        border-radius: 9999px;
+        overflow: hidden;
+      }
+
+      .confidence-fill {
+        height: 100%;
+        background: #4f46e5;
+        transition: width 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container mx-auto px-4 py-8">
+      <div class="text-center mb-8">
+        <h1 class="text-4xl font-bold text-gray-900 mb-2">Digit Recognition</h1>
+      </div>
+
+      <div class="max-w-2xl mx-auto">
+        <div class="canvas-container">
+          <canvas id="drawingCanvas" width="280" height="280"></canvas>
+
+          <div class="flex justify-center gap-4 mt-4">
+            <button id="clear-button" class="button clear">Clear Canvas</button>
+            <button id="predict-button" class="button">Predict Digit</button>
+          </div>
+        </div>
+
+        <div id="result-container" class="mt-8" style="display: none">
+          <div class="result-card">
+            <h2 class="text-xl font-semibold mb-4">Result</h2>
+            <div class="mb-4">
+              <div
+                class="text-3xl font-bold text-indigo-600"
+                id="predicted-digit"
+              ></div>
+            </div>
+            <div>
+              <div class="flex justify-between mb-1">
+                <span class="text-sm font-medium text-gray-700"
+                  >Confidence</span
+                >
+                <span
+                  class="text-sm font-medium text-gray-700"
+                  id="confidence"
+                ></span>
+              </div>
+              <div class="confidence-bar">
+                <div class="confidence-fill" id="confidence-bar"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("drawingCanvas");
+      const ctx = canvas.getContext("2d");
+      let isDrawing = false;
+      let lastX = 0;
+      let lastY = 0;
+
+      // Set up canvas
+      ctx.lineWidth = 15;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "black";
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Drawing functions
+      function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        [lastX, lastY] = [x, y];
+      }
+
+      // Touch support
+      function getTouchPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: e.touches[0].clientX - rect.left,
+          y: e.touches[0].clientY - rect.top,
+        };
+      }
+
+      function handleStart(e) {
+        e.preventDefault();
+        isDrawing = true;
+        const pos = getTouchPos(e);
+        [lastX, lastY] = [pos.x, pos.y];
+      }
+
+      function handleMove(e) {
+        e.preventDefault();
+        if (!isDrawing) return;
+        const pos = getTouchPos(e);
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+
+        [lastX, lastY] = [pos.x, pos.y];
+      }
+
+      // Mouse events
+      canvas.addEventListener("mousedown", (e) => {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        [lastX, lastY] = [e.clientX - rect.left, e.clientY - rect.top];
+      });
+      canvas.addEventListener("mousemove", draw);
+      canvas.addEventListener("mouseup", () => (isDrawing = false));
+      canvas.addEventListener("mouseout", () => (isDrawing = false));
+
+      // Touch events
+      canvas.addEventListener("touchstart", handleStart, false);
+      canvas.addEventListener("touchmove", handleMove, false);
+      canvas.addEventListener("touchend", () => (isDrawing = false), false);
+
+      // Clear canvas
+      document.getElementById("clear-button").addEventListener("click", () => {
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        document.getElementById("result-container").style.display = "none";
+      });
+
+      // Update results display
+      function updateResults(results) {
+        document.getElementById("result-container").style.display = "block";
+        document.getElementById("predicted-digit").textContent = results.digit;
+        const confidence = (results.confidence * 100).toFixed(1);
+        document.getElementById("confidence").textContent = `${confidence}%`;
+        document.getElementById("confidence-bar").style.width =
+          `${confidence}%`;
+      }
+
+      // Predict digit
+      document
+        .getElementById("predict-button")
+        .addEventListener("click", async () => {
+          const imageData = canvas.toDataURL("image/png");
+
+          try {
+            const response = await fetch("/predict", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ image: imageData }),
+            });
+
+            const results = await response.json();
+            if (results.error) {
+              console.error("Error:", results.error);
+              alert("Error making prediction");
+              return;
+            }
+
+            updateResults(results);
+          } catch (error) {
+            console.error("Error:", error);
+            alert("Error making prediction");
+          }
+        });
+    </script>
+  </body>
+</html>
