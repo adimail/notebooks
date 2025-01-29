@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digit Recognition with TensorFlow.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin: 20px;
+      }
+      canvas {
+        border: 2px solid black;
+        cursor: crosshair;
+        background-color: white;
+      }
+      #controls {
+        margin-top: 10px;
+      }
+      button {
+        padding: 10px 15px;
+        font-size: 16px;
+        margin: 5px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Handwritten Digit Recognition</h1>
+    <canvas id="canvas" width="280" height="280"></canvas>
+    <div id="controls">
+      <button onclick="predictDigit()">Predict</button>
+      <button onclick="clearCanvas()">Clear</button>
+    </div>
+    <h2 id="result">Predicted Digit: -</h2>
+
+    <script>
+      let model;
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      let drawing = false;
+
+      // Load TensorFlow.js model
+      async function loadModel() {
+        console.log("Loading model...");
+        model = await tf.loadLayersModel("digit_recognition_cnn.h5");
+        console.log("Model loaded successfully.");
+      }
+      loadModel();
+
+      // Handle drawing on the canvas
+      canvas.addEventListener("mousedown", () => (drawing = true));
+      canvas.addEventListener("mouseup", () => (drawing = false));
+      canvas.addEventListener("mousemove", draw);
+
+      function draw(event) {
+        if (!drawing) return;
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(event.offsetX, event.offsetY, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Clear the canvas
+      function clearCanvas() {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        document.getElementById("result").innerText = "Predicted Digit: -";
+      }
+
+      // Predict digit from canvas
+      async function predictDigit() {
+        if (!model) {
+          console.error("Model not loaded yet.");
+          return;
+        }
+
+        console.log("Processing image...");
+        let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let pixels = tf.browser
+          .fromPixels(imageData, 1)
+          .resizeNearestNeighbor([28, 28])
+          .toFloat()
+          .div(tf.scalar(255.0))
+          .expandDims(0);
+
+        console.log("Running prediction...");
+        let prediction = model.predict(pixels);
+        let predictedClass = prediction.argMax(1).dataSync()[0];
+
+        console.log("Predicted Digit:", predictedClass);
+        document.getElementById("result").innerText =
+          "Predicted Digit: " + predictedClass;
+      }
+    </script>
+  </body>
+</html>
