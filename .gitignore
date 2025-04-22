@@ -141,3 +141,5 @@ notebook/templates/*.html
 
 .DS_Store
 .venv
+
+*.data
